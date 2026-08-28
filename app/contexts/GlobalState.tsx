@@ -10,7 +10,7 @@ import React, {
   useRef,
   ReactNode,
 } from "react";
-import { useAccessToken, useAuth } from "@workos-inc/authkit-nextjs/components";
+import { useAccessToken, useAuth } from "@/lib/auth/use-local-aware-auth";
 import {
   type ChatMode,
   type AgentPermissionMode,
