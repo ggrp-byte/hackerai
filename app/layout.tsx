@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { cookies, headers } from "next/headers";
 import { withAuth } from "@workos-inc/authkit-nextjs";
+import { AuthKitProvider } from "@workos-inc/authkit-nextjs/components";
 import "./globals.css";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -20,15 +21,8 @@ import {
   parseFirstTouchAttribution,
 } from "@/lib/analytics/acquisition";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
+const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
 const APP_NAME = "HackerAI";
 const APP_DEFAULT_TITLE = "HackerAI - AI-Powered Penetration Testing Assistant";
@@ -38,91 +32,52 @@ const APP_DESCRIPTION =
 
 export const metadata: Metadata = {
   applicationName: APP_NAME,
-  title: {
-    default: APP_DEFAULT_TITLE,
-    template: "%s",
-  },
+  title: { default: APP_DEFAULT_TITLE, template: "%s" },
   description: APP_DESCRIPTION,
   manifest: "/manifest.json",
   keywords: [
-    "hackerai",
-    "pentestgpt",
-    "hacker ai",
-    "pentest ai",
-    "penetration testing tool",
-    "penetration testing ai",
-    "hacking ai",
-    "pentesting ai",
-    "pentest automation",
-    "security assessment ai",
-    "vulnerability scanner ai",
-    "offensive security ai",
-    "red team ai",
-    "cybersecurity ai assistant",
-    "bug bounty ai",
-    "pentest gpt",
-    "security ai",
+    "hackerai", "pentestgpt", "hacker ai", "pentest ai", "penetration testing tool",
+    "penetration testing ai", "hacking ai", "pentesting ai", "pentest automation",
+    "security assessment ai", "vulnerability scanner ai", "offensive security ai",
+    "red team ai", "cybersecurity ai assistant", "bug bounty ai", "pentest gpt", "security ai",
   ],
   openGraph: {
-    type: "website",
-    siteName: APP_NAME,
-    title: {
-      default: APP_DEFAULT_TITLE,
-      template: APP_TITLE_TEMPLATE,
-    },
+    type: "website", siteName: APP_NAME,
+    title: { default: APP_DEFAULT_TITLE, template: APP_TITLE_TEMPLATE },
     description: APP_DESCRIPTION,
-    images: [
-      {
-        url: "https://hackerai.co/icon-512x512.png",
-        width: 512,
-        height: 512,
-        alt: "HackerAI",
-      },
-    ],
+    images: [{ url: "https://hackerai.co/icon-512x512.png", width: 512, height: 512, alt: "HackerAI" }],
   },
   twitter: {
     card: "summary",
-    title: {
-      default: APP_DEFAULT_TITLE,
-      template: APP_TITLE_TEMPLATE,
-    },
+    title: { default: APP_DEFAULT_TITLE, template: APP_TITLE_TEMPLATE },
     description: APP_DESCRIPTION,
-    images: [
-      {
-        url: "https://hackerai.co/icon-512x512.png",
-        width: 512,
-        height: 512,
-        alt: "HackerAI",
-      },
-    ],
+    images: [{ url: "https://hackerai.co/icon-512x512.png", width: 512, height: 512, alt: "HackerAI" }],
   },
 };
 
 async function getInitialAuth() {
-  const requestHeaders = await headers();
-
-  // Static public pages are prerendered without proxy-injected AuthKit headers.
-  if (!requestHeaders.has("x-workos-middleware")) {
-    return { user: null } as const;
+  if (process.env.HACKERAI_LOCAL_MODEL === "true") {
+    return {
+      user: {
+        id: "local-user",
+        email: "local@localhost",
+        firstName: "Local",
+        lastName: "User",
+        profilePictureUrl: null,
+      },
+      organizationId: undefined,
+      entitlements: [],
+      roles: [],
+    } as any;
   }
 
-  // Never serialize the server-only access token into the client provider.
-  // An ended refresh session is equivalent to being signed out; hydrating that
-  // state keeps the root layout available so the user can sign in again.
+  const requestHeaders = await headers();
+  if (!requestHeaders.has("x-workos-middleware")) return { user: null } as const;
   return resolveClientInitialAuth(withAuth);
 }
 
-export default async function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
-  // Supplying server-resolved auth prevents AuthKitProvider from invoking its
-  // getAuth Server Action on every mount.
-  const [initialAuth, cookieStore] = await Promise.all([
-    getInitialAuth(),
-    cookies(),
-  ]);
+export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  const [initialAuth, cookieStore] = await Promise.all([getInitialAuth(), cookies()]);
   const firstTouchAttribution = parseFirstTouchAttribution(
     cookieStore.get(FIRST_TOUCH_ATTRIBUTION_COOKIE_NAME)?.value,
   );
@@ -148,22 +103,15 @@ export default async function RootLayout({
   );
 
   return (
-    <html
-      lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} dark h-full`}
-      suppressHydrationWarning
-    >
+    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} dark h-full`} suppressHydrationWarning>
       <head>
-        <meta
-          name="viewport"
-          content="width=device-width, initial-scale=1, viewport-fit=cover"
-        />
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
       </head>
       <body className="antialiased h-full">
-        <ConvexClientProvider initialAuth={initialAuth}>
-          {content}
-        </ConvexClientProvider>
+        <AuthKitProvider initialAuth={initialAuth} onSessionExpired={false}>
+          <ConvexClientProvider initialAuth={initialAuth}>{content}</ConvexClientProvider>
+        </AuthKitProvider>
       </body>
     </html>
   );
