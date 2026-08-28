@@ -184,16 +184,7 @@ const connect = async (): Promise<void> => {
       await rawRequest({
         method: "server/discover",
         protocol: "modern",
-        params: {
-          _meta: {
-            "io.modelcontextprotocol/protocolVersion": MODERN_PROTOCOL_VERSION,
-            "io.modelcontextprotocol/clientInfo": {
-              name: "hackerai-local",
-              version: "1.0.0",
-            },
-            "io.modelcontextprotocol/clientCapabilities": {},
-          },
-        },
+        params: {},
       });
       era = "modern";
       return;
