@@ -49,15 +49,17 @@ const replayOutput = (result) => {
   if (result.stderr) process.stderr.write(result.stderr);
 };
 
-const exitForResult = (result, action) => {
+const fail = (result, action) => {
   if (result.error) {
     console.error(
       `[convex-local] failed to ${action}: ${result.error.message}`,
     );
-    process.exit(1);
   }
-  process.exit(result.status ?? 1);
+  replayOutput(result);
+  return result.status ?? 1;
 };
+
+let exitCode = 1;
 
 try {
   if (!existsSync(convexEnvFile)) {
@@ -68,27 +70,28 @@ try {
 
   if (selection.status === 0) {
     replayOutput(selection);
-    process.exit(0);
+    exitCode = 0;
+  } else {
+    const selectionOutput = `${selection.stdout ?? ""}\n${selection.stderr ?? ""}`;
+
+    if (!selectionOutput.includes("No local deployment found.")) {
+      exitCode = fail(selection, "select the local deployment");
+    } else {
+      console.log(
+        "[convex-local] No local deployment found; creating one for this worktree.",
+      );
+      const creation = runPnpm(createArgs);
+      exitCode = creation.status === 0
+        ? (replayOutput(creation), 0)
+        : fail(creation, "create the local deployment");
+    }
   }
-
-  const selectionOutput = `${selection.stdout ?? ""}\n${selection.stderr ?? ""}`;
-
-  if (!selectionOutput.includes("No local deployment found.")) {
-    replayOutput(selection);
-    exitForResult(selection, "select the local deployment");
-  }
-
-  console.log(
-    "[convex-local] No local deployment found; creating one for this worktree.",
-  );
-
-  const creation = runPnpm(createArgs);
-  replayOutput(creation);
-  exitForResult(creation, "create the local deployment");
 } finally {
   try {
     unlinkSync(convexEnvFile);
   } catch {
-    // Nothing to clean up if the temporary file was already removed.
+    // Temporary file may not exist.
   }
 }
+
+process.exit(exitCode);
