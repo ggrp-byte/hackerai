@@ -1,0 +1,37 @@
+name: Apply local Ollama + Dr.Binary integration
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.event_name == 'workflow_dispatch' || !contains(github.event.head_commit.message, '[local-integration-applied]')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Apply integration
+        run: node scripts/apply-local-ollama-drbinary.mjs
+
+      - name: Commit patched source
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+          git commit -m "feat: wire local Ollama agent and Dr.Binary MCP [local-integration-applied]"
+          git push origin HEAD:main
