@@ -1,0 +1,16 @@
+# Local HackerAI model recipe
+#
+# Put your GGUF outside git, then either:
+#   ollama create hacker-local -f Modelfile.hackerai
+# or run: node scripts/start-local.mjs
+#
+# Override the GGUF path with HACKERAI_GGUF_PATH when using the starter.
+# The starter creates the model automatically from this template.
+
+FROM ./models/qwen3-14b-abliterated-q4_k_m.gguf
+
+PARAMETER num_ctx 16384
+PARAMETER temperature 0.2
+PARAMETER top_p 0.9
+
+SYSTEM "You are HackerAI's local agent. Use available tools when they provide evidence or actions. For binary analysis, perform structured static and dynamic analysis and distinguish observations from hypotheses."
