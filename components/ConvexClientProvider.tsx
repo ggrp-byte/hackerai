@@ -1,7 +1,7 @@
 "use client";
 
 import { ReactNode, useState } from "react";
-import { ConvexReactClient, ConvexProviderWithAuth } from "convex/react";
+import { ConvexReactClient, ConvexProvider, ConvexProviderWithAuth } from "convex/react";
 import { AuthKitProvider } from "@workos-inc/authkit-nextjs/components";
 import type { NoUserInfo, UserInfo } from "@workos-inc/authkit-nextjs";
 import { useAuthFromAuthKit } from "@/lib/auth/use-auth-from-authkit";
@@ -10,12 +10,6 @@ const PRERENDER_CONVEX_URL = "https://placeholder.convex.cloud";
 
 type AuthKitInitialAuth =
   Omit<UserInfo, "accessToken"> | Omit<NoUserInfo, "accessToken">;
-
-const useLocalAuth = () => ({
-  isLoading: false,
-  isAuthenticated: true,
-  fetchAccessToken: async () => null,
-});
 
 export function ConvexClientProvider({
   children,
@@ -39,15 +33,12 @@ export function ConvexClientProvider({
   const isLocalMode = process.env.NEXT_PUBLIC_HACKERAI_LOCAL === "true";
 
   if (isLocalMode) {
-    // Keep the AuthKit React context because parts of the existing UI consume
-    // useAuth/useAccessToken, but do not provide a synthetic signed-in WorkOS
-    // session. Local API routes resolve the identity as `local-user` instead.
-    // The Convex auth hook independently reports authenticated in local mode.
+    // Local mode deliberately does not fabricate a WorkOS/Convex JWT.
+    // Keep AuthKit context available to legacy UI consumers, but use a plain
+    // ConvexProvider so Convex does not enter an auth/token refresh loop.
     return (
       <AuthKitProvider initialAuth={{ user: null }} onSessionExpired={false}>
-        <ConvexProviderWithAuth client={convex} useAuth={useLocalAuth}>
-          {children}
-        </ConvexProviderWithAuth>
+        <ConvexProvider client={convex}>{children}</ConvexProvider>
       </AuthKitProvider>
     );
   }
