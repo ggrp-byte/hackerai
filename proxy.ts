@@ -197,10 +197,6 @@ function buildEndedSessionResponse(
   request: NextRequest,
   pathname: string,
 ): NextResponse {
-  // A Server Action still runs after middleware. Letting an ended session
-  // through on a public page means the action's `withAuth()` call has no
-  // AuthKit middleware context and throws a misleading 500 instead of a clean
-  // authentication response.
   if (isNextActionRequest(request)) {
     return withSessionCookieCleared(
       NextResponse.json(
@@ -248,6 +244,10 @@ function buildEndedSessionResponse(
 export default async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
 
+  if (process.env.HACKERAI_LOCAL_MODEL === "true") {
+    return withAttributionCookies(request, NextResponse.next());
+  }
+
   if (isUnsupportedRootPageRequest(request, pathname)) {
     return NextResponse.json(
       {
@@ -263,10 +263,6 @@ export default async function proxy(request: NextRequest) {
     );
   }
 
-  // Next parses the Origin header before its Server Action CSRF comparison.
-  // Reject malformed values here so an invalid client header cannot turn into
-  // an unhandled URL-construction error. Well-formed cross-origin requests are
-  // still left to Next's existing CSRF validation.
   if (hasMalformedNextActionOrigin(request)) {
     const requestId = request.headers.get("x-vercel-id");
     console.warn(
@@ -295,7 +291,6 @@ export default async function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Desktop app: redirect unauthenticated users to desktop-specific error page
   if (isDesktopApp(request)) {
     const hasSession = request.cookies.has("wos-session");
 
@@ -393,7 +388,6 @@ export default async function proxy(request: NextRequest) {
     );
   }
 
-  // If rate-limited (not a real session expiry), don't redirect to login
   if (hadSessionCookie && refreshHitRateLimit) {
     if (!isBrowserRequest(request)) {
       const rateLimitHeaders = new Headers(responseHeaders);
@@ -406,7 +400,6 @@ export default async function proxy(request: NextRequest) {
         ),
       );
     }
-    // For browser requests, let through rather than forcing a confusing login redirect
     return withAttributionCookies(
       request,
       NextResponse.next({
@@ -469,9 +462,6 @@ function buildResponseHeaders(
   const responseHeaders = new Headers(authkitHeaders);
   responseHeaders.delete(SESSION_HEADER);
 
-  // AuthKit clears session cookies for every refresh exception. A provider
-  // rate limit is transient, so forwarding those deletions would turn a
-  // recoverable retry into a logged-out session.
   if (preserveSessionCookies) {
     responseHeaders.delete("set-cookie");
   }
@@ -481,9 +471,7 @@ function buildResponseHeaders(
 
 export const config = {
   matcher: [
-    // Skip Next.js internals and all static files, unless found in search params
     "/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
-    // Always run for API routes
     "/(api|trpc)(.*)",
   ],
 };
