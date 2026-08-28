@@ -31,7 +31,6 @@ const LOGIN_TYPING_TAILS = [
   "hunt for bugs in...",
 ];
 
-// Simple unauthenticated content that redirects to signup on message send
 const UnauthenticatedContent = () => {
   const input = useComposerInput();
 
@@ -76,9 +75,7 @@ const UnauthenticatedContent = () => {
       </div>
 
       <div className="flex-1 flex flex-col min-h-0">
-        {/* Centered content area */}
         <div className="flex-1 flex flex-col items-center justify-center px-6 py-[15vh] pb-[18vh] min-h-0">
-          {/* Title */}
           <div className="mb-4 flex flex-col items-center px-4 text-center md:mb-6">
             <h1 className="text-4xl font-bold text-foreground mb-2 md:text-5xl">
               What will you hack today?
@@ -88,7 +85,6 @@ const UnauthenticatedContent = () => {
             </p>
           </div>
 
-          {/* Input */}
           <div className="w-full max-w-3xl">
             <ChatInput
               onSubmit={handleSubmit}
@@ -106,7 +102,6 @@ const UnauthenticatedContent = () => {
           </div>
         </div>
 
-        {/* Footer */}
         <div className="flex-shrink-0">
           <Footer />
         </div>
@@ -115,12 +110,10 @@ const UnauthenticatedContent = () => {
   );
 };
 
-// Authenticated content that shows chat (UUID generated internally)
 const AuthenticatedContent = () => {
   return <Chat autoResume={false} />;
 };
 
-// Main page component with Convex authentication
 export default function Page() {
   const {
     subscription,
@@ -135,6 +128,7 @@ export default function Page() {
     usePricingDialog(subscription);
   const { isLoading, isAuthenticated } = useConvexAuth();
   const hasAuthHint = useHasAuthenticatedBefore();
+  const isLocalMode = process.env.NEXT_PUBLIC_HACKERAI_LOCAL === "true";
 
   const { isMigrating, migrate } = usePentestgptMigration();
   const searchParams =
@@ -161,7 +155,7 @@ export default function Page() {
     return { initialSeats: seats, initialPlan: plan };
   }, [searchParams]);
 
-  if (isAuthenticated || (isLoading && hasAuthHint)) {
+  if (isLocalMode || isAuthenticated || (isLoading && hasAuthHint)) {
     return (
       <>
         <AuthenticatedContent />
