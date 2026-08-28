@@ -21,6 +21,67 @@ jobs:
         with:
           node-version: 22
 
+      - name: Normalize patch script
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          p = Path('scripts/apply-local-ollama-drbinary.mjs')
+          s = p.read_text()
+          pattern = re.compile(r"const tierMarker = .*?\nif \(!providers\.includes\('const LOCAL_MODEL_TIER_ROUTING'\)\) \{.*?\n\}\nwrite\(\"lib/ai/providers\.ts\", providers\);", re.S)
+          replacement = '''const tierMarker = 'export function resolveTierToProviderKey(\\n  tier: SelectedModel,\\n  _mode: ChatMode,\\n): ModelName | null {\\n  if (tier === "auto") return null;\\n';
+          const replacement = String.raw`const LOCAL_MODEL_TIER_ROUTING = new Set<SelectedModel>([
+  "hackerai-standard",
+  "hackerai-pro",
+  "hackerai-max",
+]);
+
+export function resolveTierToProviderKey(
+  tier: SelectedModel,
+  _mode: ChatMode,
+): ModelName | null {
+  if (tier === "auto") return null;
+  if (localOllamaEnabled && LOCAL_MODEL_TIER_ROUTING.has(tier)) {
+    return _mode === "agent" ? "agent-model" : "ask-model";
+  }
+`;
+          if 'const LOCAL_MODEL_TIER_ROUTING' not in s:
+              m = pattern.search(s)
+              if not m:
+                  raise SystemExit('Could not locate tier-routing patch block')
+              block = m.group(0)
+              old_tail = block.split('    "lib/ai/providers.ts",', 1)[1]
+              fixed = '''const tierMarker = 'export function resolveTierToProviderKey(\\n  tier: SelectedModel,\\n  _mode: ChatMode,\\n): ModelName | null {\\n  if (tier === "auto") return null;\\n';
+          if (!providers.includes('const LOCAL_MODEL_TIER_ROUTING')) {
+            providers = replaceOnce(
+              providers,
+              tierMarker,
+              String.raw`const LOCAL_MODEL_TIER_ROUTING = new Set<SelectedModel>([
+  "hackerai-standard",
+  "hackerai-pro",
+  "hackerai-max",
+]);
+
+export function resolveTierToProviderKey(
+  tier: SelectedModel,
+  _mode: ChatMode,
+): ModelName | null {
+  if (tier === "auto") return null;
+  if (localOllamaEnabled && LOCAL_MODEL_TIER_ROUTING.has(tier)) {
+    return _mode === "agent" ? "agent-model" : "ask-model";
+  }
+`,
+              "lib/ai/providers.ts",
+            );
+          }
+          write("lib/ai/providers.ts", providers);'''
+              s = s[:m.start()] + fixed + old_tail
+          p.write_text(s)
+          PY
+
+      - name: Validate patch script syntax
+        run: node --check scripts/apply-local-ollama-drbinary.mjs
+
       - name: Apply integration
         run: node scripts/apply-local-ollama-drbinary.mjs
 
