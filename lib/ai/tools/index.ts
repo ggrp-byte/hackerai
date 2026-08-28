@@ -259,7 +259,9 @@ export const createTools = (
       run_terminal_cmd: createRunTerminalCmd(context),
       interact_terminal_session: createInteractTerminalSession(context),
       get_terminal_files: createGetTerminalFiles(context),
-      drbinary: createDrBinaryTool(context),
+      ...(process.env.DRBINARY_MCP_ENABLED !== "false" && {
+        drbinary: createDrBinaryTool(context),
+      }),
       file: createFile(context),
       todo_write: createTodoWrite(context),
       ...(notesEnabled && {
