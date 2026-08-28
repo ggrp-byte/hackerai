@@ -40,10 +40,15 @@ export function ConvexClientProvider({
   const isLocalMode = process.env.NEXT_PUBLIC_HACKERAI_LOCAL === "true";
 
   if (isLocalMode) {
+    // GlobalState still consumes WorkOS AuthKit hooks for UI/session state.
+    // Keep that React context present, but start it signed out so AuthKit does
+    // not try to call its server-side access-token action in local mode.
     return (
-      <ConvexProviderWithAuth client={convex} useAuth={useLocalAuth}>
-        {children}
-      </ConvexProviderWithAuth>
+      <AuthKitProvider initialAuth={{ user: null }} onSessionExpired={false}>
+        <ConvexProviderWithAuth client={convex} useAuth={useLocalAuth}>
+          {children}
+        </ConvexProviderWithAuth>
+      </AuthKitProvider>
     );
   }
 
