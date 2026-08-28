@@ -57,11 +57,17 @@ const isOllamaRunning = async () => {
 
 if (!(await isOllamaRunning())) {
   console.log("Starting Ollama...");
+  const ollamaEnv = {
+    ...process.env,
+    OLLAMA_FLASH_ATTENTION: process.env.OLLAMA_FLASH_ATTENTION || "1",
+    OLLAMA_NUM_PARALLEL: process.env.OLLAMA_NUM_PARALLEL || "1",
+  };
   const child = spawn(commandName, ["serve"], {
     cwd: root,
     detached: true,
     stdio: "ignore",
     windowsHide: true,
+    env: ollamaEnv,
   });
   child.unref();
 
@@ -138,10 +144,23 @@ console.log("");
 console.log(`HackerAI local model: ${modelName}`);
 console.log(`Ollama endpoint: ${ollamaUrl}`);
 console.log(`Dr.Binary MCP: ${childEnv.DRBINARY_MCP_URL}`);
+console.log(
+  `Trigger.dev: ${
+    childEnv.TRIGGER_PROJECT_ID && childEnv.TRIGGER_SECRET_KEY
+      ? "enabled"
+      : "not configured"
+  }`,
+);
 console.log("");
 
 const pnpm = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
-const child = spawn(pnpm, ["run", "dev:local"], {
+const startScript =
+  childEnv.TRIGGER_PROJECT_ID && childEnv.TRIGGER_SECRET_KEY
+    ? "dev:all"
+    : "dev:local";
+
+console.log(`Starting pnpm run ${startScript}...`);
+const child = spawn(pnpm, ["run", startScript], {
   cwd: root,
   env: childEnv,
   stdio: "inherit",
