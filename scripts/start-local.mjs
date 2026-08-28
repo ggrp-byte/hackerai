@@ -135,6 +135,7 @@ if (!modelExists) {
 const childEnv = {
   ...process.env,
   HACKERAI_LOCAL_MODEL: "true",
+  NEXT_PUBLIC_HACKERAI_LOCAL: "true",
   OLLAMA_BASE_URL: ollamaUrl,
   OLLAMA_API_KEY: process.env.OLLAMA_API_KEY || "ollama",
   OLLAMA_MODEL: modelName,
