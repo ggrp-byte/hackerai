@@ -2,15 +2,18 @@ import fs from "node:fs";
 import path from "node:path";
 import { execFileSync, spawn } from "node:child_process";
 import process from "node:process";
+import dotenv from "dotenv";
 
 const root = process.cwd();
-
 const envFile = path.join(root, ".env.local");
 const envExample = path.join(root, ".env.local.example");
+
 if (!fs.existsSync(envFile) && fs.existsSync(envExample)) {
   fs.copyFileSync(envExample, envFile);
   console.log("Created .env.local from .env.local.example");
 }
+
+dotenv.config({ path: envFile, override: false });
 
 const modelName = process.env.OLLAMA_MODEL || "hacker-local";
 const ggufPath = path.resolve(
@@ -39,8 +42,7 @@ try {
   });
 } catch {
   console.error("Ollama is not installed or is not on PATH.");
-  console.error("Install Ollama, then run this command again:");
-  console.error("  https://ollama.com/download");
+  console.error("Install Ollama from https://ollama.com/download");
   process.exit(1);
 }
 
@@ -87,10 +89,17 @@ try {
   throw error;
 }
 
-if (!new RegExp(`^${modelName.replace(/[.*+?^${}()|[\\]\\]/g, "\\\\$&")}\\s`, "m").test(modelList)) {
+const modelExists = modelList
+  .split(/\r?\n/)
+  .slice(1)
+  .some((line) => line.trim().split(/\s+/)[0] === modelName);
+
+if (!modelExists) {
   if (!fs.existsSync(ggufPath)) {
     console.error(`GGUF model not found: ${ggufPath}`);
-    console.error("Set HACKERAI_GGUF_PATH to the full path of your GGUF file.");
+    console.error(
+      "Set HACKERAI_GGUF_PATH to the full path of your GGUF file, or place it under models/.",
+    );
     process.exit(1);
   }
 
@@ -102,7 +111,7 @@ if (!new RegExp(`^${modelName.replace(/[.*+?^${}()|[\\]\\]/g, "\\\\$&")}\\s`, "m
     "PARAMETER top_p 0.9",
     "SYSTEM You are HackerAI's local agent. Use tools whenever they provide evidence or actions. For binary analysis, investigate systematically and distinguish observations from hypotheses.",
     "",
-  ].join("\\n");
+  ].join("\n");
 
   fs.writeFileSync(generatedModelfile, modelDefinition, "utf8");
   console.log(`Creating Ollama model '${modelName}' from ${ggufPath}`);
