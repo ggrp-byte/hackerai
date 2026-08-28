@@ -144,7 +144,11 @@ const childEnv = {
   DRBINARY_MCP_TIMEOUT_MS: process.env.DRBINARY_MCP_TIMEOUT_MS || "600000",
 };
 
-if (!/^true$/i.test(process.env.HACKERAI_ENABLE_TRIGGER || "false")) {
+const enableTrigger = /^true$/i.test(
+  process.env.HACKERAI_ENABLE_TRIGGER || "false",
+);
+
+if (!enableTrigger) {
   delete childEnv.TRIGGER_PROJECT_ID;
   delete childEnv.TRIGGER_SECRET_KEY;
 }
@@ -166,42 +170,82 @@ console.log(
 );
 console.log("");
 
-const enableTrigger = /^true$/i.test(
-  process.env.HACKERAI_ENABLE_TRIGGER || "false",
-);
-const startScript = enableTrigger ? "dev:all" : "dev:local";
+const children = [];
 
-console.log(`Starting pnpm run ${startScript}...`);
-
-let child;
-if (process.platform === "win32") {
-  const comspec = process.env.ComSpec || "cmd.exe";
-  child = spawn(
-    comspec,
-    ["/d", "/s", "/c", `pnpm.cmd run ${startScript}`],
-    {
+const spawnPnpmWindowsSafe = (args) => {
+  if (process.platform === "win32") {
+    const comspec = process.env.ComSpec || "cmd.exe";
+    return spawn(comspec, ["/d", "/s", "/c", `pnpm.cmd ${args.join(" ")}`], {
       cwd: root,
       env: childEnv,
       stdio: "inherit",
       windowsHide: false,
       shell: false,
-    },
-  );
-} else {
-  child = spawn("pnpm", ["run", startScript], {
+    });
+  }
+
+  return spawn("pnpm", args, {
     cwd: root,
     env: childEnv,
     stdio: "inherit",
     shell: false,
   });
+};
+
+if (enableTrigger) {
+  console.log("Starting pnpm run dev:all...");
+  children.push(spawnPnpmWindowsSafe(["run", "dev:all"]));
+} else {
+  console.log("Starting local Next.js + Convex...");
+  children.push(spawnPnpmWindowsSafe(["run", "dev:next"]));
+  children.push(
+    spawnPnpmWindowsSafe([
+      "exec",
+      "convex",
+      "dev",
+      "--typecheck=disable",
+    ]),
+  );
 }
 
-child.on("error", (error) => {
-  console.error(`Unable to start ${startScript}: ${error.message}`);
-  process.exit(1);
-});
+let shuttingDown = false;
 
-child.on("exit", (code, signal) => {
-  if (signal) process.kill(process.pid, signal);
-  process.exit(code ?? 0);
-});
+const shutdown = (signal) => {
+  if (shuttingDown) return;
+  shuttingDown = true;
+
+  for (const child of children) {
+    if (!child.killed) {
+      try {
+        child.kill(signal);
+      } catch {
+        // Child may already have exited.
+      }
+    }
+  }
+};
+
+process.on("SIGINT", () => shutdown("SIGINT"));
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+
+for (const child of children) {
+  child.on("error", (error) => {
+    if (!shuttingDown) {
+      console.error(`Local process failed to start: ${error.message}`);
+      shuttingDown = true;
+      shutdown("SIGTERM");
+      process.exit(1);
+    }
+  });
+
+  child.on("exit", (code, signal) => {
+    if (shuttingDown) return;
+
+    console.error(
+      `Local process exited (code=${code ?? "null"}, signal=${signal ?? "none"}).`,
+    );
+    shuttingDown = true;
+    shutdown("SIGTERM");
+    process.exit(code ?? 1);
+  });
+}
