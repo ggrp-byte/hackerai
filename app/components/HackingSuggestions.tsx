@@ -2,14 +2,14 @@
 
 import { useAuth } from "@workos-inc/authkit-nextjs/components";
 
-const DEFAULT_QUESTION = "What's on your mind?";
+const DEFAULT_QUESTION = "What are we testing today?";
 
 export const HackingSuggestions = () => {
   const { user } = useAuth();
-  const name = user?.firstName || undefined;
+  const name = user?.firstName;
 
   const question = name
-    ? `What's on your mind, ${name}?`
+    ? `What are we testing today, ${name}?`
     : DEFAULT_QUESTION;
 
   return (
