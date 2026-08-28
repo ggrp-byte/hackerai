@@ -8,7 +8,7 @@ const pnpmCommand = isWindows ? "pnpm.cmd" : "pnpm";
 
 const result = spawnSync(
   pnpmCommand,
-  ["exec", "convex", "dev", "--once"],
+  ["exec", "convex", "dev", "--once", "--typecheck=disable"],
   {
     cwd: root,
     encoding: "utf8",
