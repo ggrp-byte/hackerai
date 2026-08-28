@@ -8,15 +8,26 @@ type JsonRpcResponse = {
   error?: { code?: number; message?: string; data?: unknown };
 };
 
-const MCP_PROTOCOL_VERSION = "2026-07-28";
-const DEFAULT_MCP_URL = "https://mcp.deepbits.com/mcp";
+type McpEra = "modern" | "legacy";
+
+const MODERN_PROTOCOL_VERSION = "2026-07-28";
+const LEGACY_PROTOCOL_VERSION = "2025-11-25";
+const DEFAULT_MCP_URL = "https://mcp.drbinary.ai/mcp";
+const DEFAULT_TIMEOUT_MS = 600_000;
 
 let nextRequestId = 1;
 let sessionId: string | undefined;
-let initialized = false;
-let initializePromise: Promise<void> | undefined;
+let era: McpEra | undefined;
+let connectPromise: Promise<void> | undefined;
 
-const getHeaders = (): Headers => {
+const getTimeoutMs = () => {
+  const raw = Number.parseInt(process.env.DRBINARY_MCP_TIMEOUT_MS ?? "", 10);
+  return Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_TIMEOUT_MS;
+};
+
+const getUrl = () => process.env.DRBINARY_MCP_URL?.trim() || DEFAULT_MCP_URL;
+
+const getCommonHeaders = () => {
   const headers = new Headers({
     "content-type": "application/json",
     accept: "application/json, text/event-stream",
@@ -25,7 +36,7 @@ const getHeaders = (): Headers => {
   if (token) headers.set("authorization", "Bearer " + token);
   const extraHeaders = process.env.DRBINARY_MCP_HEADERS_JSON?.trim();
   if (extraHeaders) {
-    const parsed = JSON.parse(extraHeaders);
+    const parsed = JSON.parse(extraHeaders) as Record<string, unknown>;
     for (const [key, value] of Object.entries(parsed)) {
       if (typeof value === "string") headers.set(key, value);
     }
@@ -34,74 +45,231 @@ const getHeaders = (): Headers => {
   return headers;
 };
 
-const getUrl = () => process.env.DRBINARY_MCP_URL?.trim() || DEFAULT_MCP_URL;
+const getModernHeaders = (method: string, name?: string) => {
+  const headers = getCommonHeaders();
+  headers.set("MCP-Protocol-Version", MODERN_PROTOCOL_VERSION);
+  headers.set("Mcp-Method", method);
+  if (name) headers.set("Mcp-Name", name);
+  return headers;
+};
+
+const fetchWithTimeout = async (input: RequestInfo | URL, init: RequestInit) => {
+  const timeout = AbortSignal.timeout(getTimeoutMs());
+  const signal = init.signal
+    ? AbortSignal.any([init.signal, timeout])
+    : timeout;
+  return fetch(input, { ...init, signal });
+};
 
 const parseResponse = async (response: Response): Promise<JsonRpcResponse> => {
   const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
-  if (contentType.includes("application/json")) return (await response.json()) as JsonRpcResponse;
+  if (contentType.includes("application/json")) {
+    return (await response.json()) as JsonRpcResponse;
+  }
+
   const text = await response.text();
-  const dataLines = text.split(/\r?\n/).filter((line) => line.startsWith("data:")).map((line) => line.slice(5).trim()).filter(Boolean);
+  const dataLines = text
+    .split(/\r?\n/)
+    .filter((line) => line.startsWith("data:"))
+    .map((line) => line.slice(5).trim())
+    .filter(Boolean);
+
   for (let i = dataLines.length - 1; i >= 0; i -= 1) {
     try {
-      const parsed = JSON.parse(dataLines[i]);
-      if (parsed?.id !== undefined || parsed?.result !== undefined || parsed?.error) return parsed;
-    } catch {}
+      const parsed = JSON.parse(dataLines[i]) as JsonRpcResponse;
+      if (
+        parsed?.id !== undefined ||
+        parsed?.result !== undefined ||
+        parsed?.error
+      ) {
+        return parsed;
+      }
+    } catch {
+      // Ignore non-JSON SSE frames.
+    }
   }
-  throw new Error("Dr.Binary MCP returned an unsupported response: " + (contentType || "unknown content type"));
+
+  throw new Error(
+    "Dr.Binary MCP returned an unsupported response: " +
+      (contentType || "unknown content type"),
+  );
 };
 
-const send = async (method: string, params: Record<string, unknown> = {}): Promise<JsonRpcResponse> => {
+const rawRequest = async ({
+  method,
+  params,
+  protocol,
+  name,
+}: {
+  method: string;
+  params: Record<string, unknown>;
+  protocol: McpEra;
+  name?: string;
+}) => {
   const id = nextRequestId++;
-  const response = await fetch(getUrl(), {
+  const headers =
+    protocol === "modern"
+      ? getModernHeaders(method, name)
+      : getCommonHeaders();
+
+  const response = await fetchWithTimeout(getUrl(), {
     method: "POST",
-    headers: getHeaders(),
+    headers,
     body: JSON.stringify({ jsonrpc: "2.0", id, method, params }),
   });
+
   const returnedSessionId = response.headers.get("mcp-session-id");
   if (returnedSessionId) sessionId = returnedSessionId;
-  if (response.status === 401) throw new Error("Dr.Binary MCP authentication is required. Set DRBINARY_MCP_AUTH_TOKEN or complete the provider OAuth flow.");
-  if (!response.ok) throw new Error("Dr.Binary MCP HTTP " + response.status + ": " + (await response.text().catch(() => "")).slice(0, 500));
+
+  if (response.status === 401) {
+    throw new Error(
+      "Dr.Binary MCP authentication is required. Authenticate the MCP session or set DRBINARY_MCP_AUTH_TOKEN.",
+    );
+  }
+
+  if (!response.ok) {
+    const detail = (await response.text().catch(() => "")).slice(0, 800);
+    const error = new Error(
+      `Dr.Binary MCP HTTP ${response.status}: ${detail}`,
+    ) as Error & { status?: number };
+    error.status = response.status;
+    throw error;
+  }
+
   const message = await parseResponse(response);
-  if (message.error) throw new Error("Dr.Binary MCP error " + (message.error.code ?? "unknown") + ": " + (message.error.message ?? "request failed"));
+  if (message.error) {
+    const error = new Error(
+      `Dr.Binary MCP error ${message.error.code ?? "unknown"}: ${message.error.message ?? "request failed"}`,
+    ) as Error & { mcpCode?: number };
+    error.mcpCode = message.error.code;
+    throw error;
+  }
   return message;
 };
 
-const ensureInitialized = async (): Promise<void> => {
-  if (initialized) return;
-  if (!initializePromise) {
-    initializePromise = (async () => {
-      await send("initialize", {
-        protocolVersion: MCP_PROTOCOL_VERSION,
-        capabilities: {},
-        clientInfo: { name: "hackerai-local", version: "1.0.0" },
+const initializeLegacy = async () => {
+  await rawRequest({
+    method: "initialize",
+    protocol: "legacy",
+    params: {
+      protocolVersion: LEGACY_PROTOCOL_VERSION,
+      capabilities: {},
+      clientInfo: { name: "hackerai-local", version: "1.0.0" },
+    },
+  });
+
+  const response = await fetchWithTimeout(getUrl(), {
+    method: "POST",
+    headers: getCommonHeaders(),
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      method: "notifications/initialized",
+      params: {},
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      "Dr.Binary MCP initialized notification failed: HTTP " + response.status,
+    );
+  }
+};
+
+const connect = async (): Promise<void> => {
+  if (era) return;
+  if (connectPromise) return connectPromise;
+
+  connectPromise = (async () => {
+    try {
+      await rawRequest({
+        method: "server/discover",
+        protocol: "modern",
+        params: {
+          _meta: {
+            "io.modelcontextprotocol/protocolVersion": MODERN_PROTOCOL_VERSION,
+            "io.modelcontextprotocol/clientInfo": {
+              name: "hackerai-local",
+              version: "1.0.0",
+            },
+            "io.modelcontextprotocol/clientCapabilities": {},
+          },
+        },
       });
-      const response = await fetch(getUrl(), {
-        method: "POST",
-        headers: getHeaders(),
-        body: JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized", params: {} }),
-      });
-      if (!response.ok) throw new Error("Dr.Binary MCP initialized notification failed: HTTP " + response.status);
-      initialized = true;
-    })().catch((error) => {
-      initializePromise = undefined;
-      sessionId = undefined;
-      initialized = false;
-      throw error;
+      era = "modern";
+      return;
+    } catch (error) {
+      if ((error as { status?: number })?.status === 401) throw error;
+    }
+
+    await initializeLegacy();
+    era = "legacy";
+  })().catch((error) => {
+    connectPromise = undefined;
+    era = undefined;
+    sessionId = undefined;
+    throw error;
+  });
+
+  await connectPromise;
+};
+
+const send = async (
+  method: string,
+  params: Record<string, unknown> = {},
+  name?: string,
+): Promise<JsonRpcResponse> => {
+  await connect();
+
+  if (era === "modern") {
+    return rawRequest({
+      method,
+      name,
+      protocol: "modern",
+      params: {
+        ...params,
+        _meta: {
+          ...(typeof params._meta === "object" && params._meta !== null
+            ? params._meta
+            : {}),
+          "io.modelcontextprotocol/protocolVersion": MODERN_PROTOCOL_VERSION,
+          "io.modelcontextprotocol/clientInfo": {
+            name: "hackerai-local",
+            version: "1.0.0",
+          },
+          "io.modelcontextprotocol/clientCapabilities": {},
+        },
+      },
     });
   }
-  await initializePromise;
+
+  return rawRequest({
+    method,
+    protocol: "legacy",
+    params,
+  });
 };
 
 export const createDrBinaryTool = (_context: ToolContext) =>
   tool({
-    description: "Call a Dr.Binary MCP binary-analysis operation. Operations: prepare_upload, inspect_binary, run_sandbox, dump_data, list_files, read_file.",
+    description:
+      "Call the Dr.Binary MCP binary-analysis backend. Operations: prepare_upload, inspect_binary, run_sandbox, dump_data, list_files, read_file.",
     inputSchema: z.object({
-      operation: z.enum(["prepare_upload", "inspect_binary", "run_sandbox", "dump_data", "list_files", "read_file"]),
+      operation: z.enum([
+        "prepare_upload",
+        "inspect_binary",
+        "run_sandbox",
+        "dump_data",
+        "list_files",
+        "read_file",
+      ]),
       arguments: z.record(z.string(), z.unknown()).default({}),
     }),
     execute: async ({ operation, arguments: args }) => {
-      await ensureInitialized();
-      const response = await send("tools/call", { name: operation, arguments: args });
+      const response = await send(
+        "tools/call",
+        { name: operation, arguments: args },
+        operation,
+      );
       return response.result;
     },
   });
