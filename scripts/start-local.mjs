@@ -62,14 +62,14 @@ if (!(await isOllamaRunning())) {
     OLLAMA_FLASH_ATTENTION: process.env.OLLAMA_FLASH_ATTENTION || "1",
     OLLAMA_NUM_PARALLEL: process.env.OLLAMA_NUM_PARALLEL || "1",
   };
-  const child = spawn(commandName, ["serve"], {
+  const ollamaChild = spawn(commandName, ["serve"], {
     cwd: root,
     detached: true,
     stdio: "ignore",
     windowsHide: true,
     env: ollamaEnv,
   });
-  child.unref();
+  ollamaChild.unref();
 
   const deadline = Date.now() + 30_000;
   while (Date.now() < deadline) {
@@ -95,10 +95,14 @@ try {
   throw error;
 }
 
+const wantedModelId = modelName.split(":")[0];
 const modelExists = modelList
   .split(/\r?\n/)
   .slice(1)
-  .some((line) => line.trim().split(/\s+/)[0] === modelName);
+  .some((line) => {
+    const listedName = line.trim().split(/\s+/)[0];
+    return listedName && listedName.split(":")[0] === wantedModelId;
+  });
 
 if (!modelExists) {
   if (!fs.existsSync(ggufPath)) {
@@ -153,7 +157,6 @@ console.log(
 );
 console.log("");
 
-const pnpm = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
 const enableTrigger = /^true$/i.test(
   process.env.HACKERAI_ENABLE_TRIGGER || "false",
 );
@@ -163,19 +166,32 @@ const startScript =
     : "dev:local";
 
 console.log(`Starting pnpm run ${startScript}...`);
-const child = spawn(pnpm, ["run", startScript], {
-  cwd: root,
-  env: childEnv,
-  stdio: "inherit",
-  windowsHide: false,
-  shell: false,
-});
+
+let child;
+if (process.platform === "win32") {
+  const comspec = process.env.ComSpec || "cmd.exe";
+  child = spawn(
+    comspec,
+    ["/d", "/s", "/c", `pnpm.cmd run ${startScript}`],
+    {
+      cwd: root,
+      env: childEnv,
+      stdio: "inherit",
+      windowsHide: false,
+      shell: false,
+    },
+  );
+} else {
+  child = spawn("pnpm", ["run", startScript], {
+    cwd: root,
+    env: childEnv,
+    stdio: "inherit",
+    shell: false,
+  });
+}
 
 child.on("error", (error) => {
-  console.error(`Unable to start ${pnpm}: ${error.message}`);
-  console.error(
-    "On Windows, make sure pnpm is installed and available in the current terminal.",
-  );
+  console.error(`Unable to start ${startScript}: ${error.message}`);
   process.exit(1);
 });
 
