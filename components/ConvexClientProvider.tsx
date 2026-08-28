@@ -12,6 +12,12 @@ const PRERENDER_CONVEX_URL = "https://placeholder.convex.cloud";
 type AuthKitInitialAuth =
   Omit<UserInfo, "accessToken"> | Omit<NoUserInfo, "accessToken">;
 
+const useLocalAuth = () => ({
+  isLoading: false,
+  isAuthenticated: true,
+  fetchAccessToken: async () => null,
+});
+
 export function ConvexClientProvider({
   children,
   initialAuth,
@@ -31,9 +37,17 @@ export function ConvexClientProvider({
     return new ConvexReactClient(convexUrl);
   });
 
+  const isLocalMode = process.env.NEXT_PUBLIC_HACKERAI_LOCAL === "true";
+
+  if (isLocalMode) {
+    return (
+      <ConvexProviderWithAuth client={convex} useAuth={useLocalAuth}>
+        {children}
+      </ConvexProviderWithAuth>
+    );
+  }
+
   return (
-    // Passing a callback still enables AuthKit's focus/visibility session probe.
-    // Disable it entirely; Convex token refresh and middleware own auth recovery.
     <AuthKitProvider initialAuth={initialAuth} onSessionExpired={false}>
       <ConvexProviderWithAuth client={convex} useAuth={useAuthFromAuthKit}>
         {children}
