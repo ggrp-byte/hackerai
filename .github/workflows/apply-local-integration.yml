@@ -25,33 +25,12 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          import re
           p = Path('scripts/apply-local-ollama-drbinary.mjs')
           s = p.read_text()
-          pattern = re.compile(r"const tierMarker = .*?\nif \(!providers\.includes\('const LOCAL_MODEL_TIER_ROUTING'\)\) \{.*?\n\}\nwrite\(\"lib/ai/providers\.ts\", providers\);", re.S)
-          replacement = '''const tierMarker = 'export function resolveTierToProviderKey(\\n  tier: SelectedModel,\\n  _mode: ChatMode,\\n): ModelName | null {\\n  if (tier === "auto") return null;\\n';
-          const replacement = String.raw`const LOCAL_MODEL_TIER_ROUTING = new Set<SelectedModel>([
-  "hackerai-standard",
-  "hackerai-pro",
-  "hackerai-max",
-]);
-
-export function resolveTierToProviderKey(
-  tier: SelectedModel,
-  _mode: ChatMode,
-): ModelName | null {
-  if (tier === "auto") return null;
-  if (localOllamaEnabled && LOCAL_MODEL_TIER_ROUTING.has(tier)) {
-    return _mode === "agent" ? "agent-model" : "ask-model";
-  }
-`;
-          if 'const LOCAL_MODEL_TIER_ROUTING' not in s:
-              m = pattern.search(s)
-              if not m:
-                  raise SystemExit('Could not locate tier-routing patch block')
-              block = m.group(0)
-              old_tail = block.split('    "lib/ai/providers.ts",', 1)[1]
-              fixed = '''const tierMarker = 'export function resolveTierToProviderKey(\\n  tier: SelectedModel,\\n  _mode: ChatMode,\\n): ModelName | null {\\n  if (tier === "auto") return null;\\n';
+          start = s.index('const tierMarker = ')
+          end_marker = 'write("lib/ai/providers.ts", providers);'
+          end = s.index(end_marker, start) + len(end_marker)
+          fixed = '''const tierMarker = 'export function resolveTierToProviderKey(\\n  tier: SelectedModel,\\n  _mode: ChatMode,\\n): ModelName | null {\\n  if (tier === "auto") return null;\\n';
           if (!providers.includes('const LOCAL_MODEL_TIER_ROUTING')) {
             providers = replaceOnce(
               providers,
@@ -75,8 +54,7 @@ export function resolveTierToProviderKey(
             );
           }
           write("lib/ai/providers.ts", providers);'''
-              s = s[:m.start()] + fixed + old_tail
-          p.write_text(s)
+          p.write_text(s[:start] + fixed + s[end:])
           PY
 
       - name: Validate patch script syntax
