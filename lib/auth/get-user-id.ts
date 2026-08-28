@@ -8,6 +8,9 @@ import {
 } from "@/lib/auth/entitlements";
 import { isEndedSessionRefreshError } from "@/lib/auth/expected-auth-errors";
 
+const LOCAL_USER_ID = "local-user";
+const LOCAL_USER_EMAIL = "local@localhost";
+
 const getSessionUserEmail = (session: unknown): string | undefined => {
   if (!session || typeof session !== "object") return undefined;
   const user = (session as { user?: unknown }).user;
@@ -16,15 +19,13 @@ const getSessionUserEmail = (session: unknown): string | undefined => {
   return typeof email === "string" ? email : undefined;
 };
 
-/**
- * Get the current user ID from the authenticated session
- * Throws ChatSDKError if user is not authenticated
- *
- * @param req - NextRequest object (server-side only)
- * @returns Promise<string> - User ID
- * @throws ChatSDKError - When user is not authenticated
- */
+const isLocalMode = () => process.env.HACKERAI_LOCAL_MODEL === "true";
+
 export const getUserID = async (req: NextRequest): Promise<string> => {
+  if (isLocalMode()) {
+    return LOCAL_USER_ID;
+  }
+
   try {
     const { authkit } = await import("@workos-inc/authkit-nextjs");
     const { session } = await authkit(req);
@@ -47,14 +48,6 @@ export const getUserID = async (req: NextRequest): Promise<string> => {
   }
 };
 
-/**
- * Get the current user ID and pro status from the authenticated session
- * Throws ChatSDKError if user is not authenticated
- *
- * @param req - NextRequest object (server-side only)
- * @returns Promise<{ userId: string; isPro: boolean; subscription: SubscriptionTier }> - Object with userId, isPro, and subscription
- * @throws ChatSDKError - When user is not authenticated
- */
 export const getUserIDAndPro = async (
   req: NextRequest,
 ): Promise<{
@@ -63,6 +56,14 @@ export const getUserIDAndPro = async (
   organizationId?: string;
   freeQuotaSubject?: string;
 }> => {
+  if (isLocalMode()) {
+    return {
+      userId: LOCAL_USER_ID,
+      subscription: "ultra",
+      freeQuotaSubject: createFreeQuotaSubject(LOCAL_USER_EMAIL),
+    };
+  }
+
   try {
     const { authkit } = await import("@workos-inc/authkit-nextjs");
     const { session } = await authkit(req);
@@ -97,6 +98,13 @@ export const getUserIDWithFreshLoginContext = async (
   req: NextRequest,
   windowMs: number = 10 * 60 * 1000,
 ): Promise<{ userId: string; freeQuotaSubject?: string }> => {
+  if (isLocalMode()) {
+    return {
+      userId: LOCAL_USER_ID,
+      freeQuotaSubject: createFreeQuotaSubject(LOCAL_USER_EMAIL),
+    };
+  }
+
   try {
     const { authkit } = await import("@workos-inc/authkit-nextjs");
     const { session } = await authkit(req);
