@@ -15,10 +15,9 @@ const fullWidthShell = (
 );
 
 /**
- * Shared layout for / and /c/[id]. Renders the Chat Sidebar only when authenticated
- * so it stays mounted across navigations within the group. Returning users keep
- * the shell mounted during brief auth refreshes so active streams and
- * computer-sidebar state do not flash away.
+ * Shared layout for / and /c/[id]. In local mode, render the authenticated
+ * shell unconditionally because local Convex auth is synthetic and does not
+ * depend on the WorkOS browser session.
  */
 export default function ChatRouteLayout({
   children,
@@ -27,8 +26,9 @@ export default function ChatRouteLayout({
 }) {
   const { isLoading, isAuthenticated } = useConvexAuth();
   const hasAuthHint = useHasAuthenticatedBefore();
+  const isLocalMode = process.env.NEXT_PUBLIC_HACKERAI_LOCAL === "true";
 
-  if (isAuthenticated || (isLoading && hasAuthHint)) {
+  if (isLocalMode || isAuthenticated || (isLoading && hasAuthHint)) {
     return (
       <div className="h-dvh min-h-0 flex flex-col bg-background overflow-hidden">
         <ChatRoutePresentationProvider>
