@@ -147,15 +147,18 @@ console.log(`Dr.Binary MCP: ${childEnv.DRBINARY_MCP_URL}`);
 console.log(
   `Trigger.dev: ${
     childEnv.TRIGGER_PROJECT_ID && childEnv.TRIGGER_SECRET_KEY
-      ? "enabled"
+      ? "available (disabled by default)"
       : "not configured"
   }`,
 );
 console.log("");
 
 const pnpm = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
+const enableTrigger = /^true$/i.test(
+  process.env.HACKERAI_ENABLE_TRIGGER || "false",
+);
 const startScript =
-  childEnv.TRIGGER_PROJECT_ID && childEnv.TRIGGER_SECRET_KEY
+  enableTrigger && childEnv.TRIGGER_PROJECT_ID && childEnv.TRIGGER_SECRET_KEY
     ? "dev:all"
     : "dev:local";
 
@@ -165,6 +168,15 @@ const child = spawn(pnpm, ["run", startScript], {
   env: childEnv,
   stdio: "inherit",
   windowsHide: false,
+  shell: false,
+});
+
+child.on("error", (error) => {
+  console.error(`Unable to start ${pnpm}: ${error.message}`);
+  console.error(
+    "On Windows, make sure pnpm is installed and available in the current terminal.",
+  );
+  process.exit(1);
 });
 
 child.on("exit", (code, signal) => {
