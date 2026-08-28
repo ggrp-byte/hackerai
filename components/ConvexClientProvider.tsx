@@ -11,17 +11,6 @@ const PRERENDER_CONVEX_URL = "https://placeholder.convex.cloud";
 type AuthKitInitialAuth =
   Omit<UserInfo, "accessToken"> | Omit<NoUserInfo, "accessToken">;
 
-const LOCAL_USER_INFO = {
-  user: {
-    id: "local-user",
-    email: "local@localhost",
-    firstName: "Local",
-    lastName: "User",
-  },
-  organizationId: undefined,
-  entitlements: ["ultra-plan"],
-} as AuthKitInitialAuth;
-
 const useLocalAuth = () => ({
   isLoading: false,
   isAuthenticated: true,
@@ -50,11 +39,12 @@ export function ConvexClientProvider({
   const isLocalMode = process.env.NEXT_PUBLIC_HACKERAI_LOCAL === "true";
 
   if (isLocalMode) {
+    // Keep the AuthKit React context because parts of the existing UI consume
+    // useAuth/useAccessToken, but do not provide a synthetic signed-in WorkOS
+    // session. Local API routes resolve the identity as `local-user` instead.
+    // The Convex auth hook independently reports authenticated in local mode.
     return (
-      <AuthKitProvider
-        initialAuth={LOCAL_USER_INFO}
-        onSessionExpired={false}
-      >
+      <AuthKitProvider initialAuth={{ user: null }} onSessionExpired={false}>
         <ConvexProviderWithAuth client={convex} useAuth={useLocalAuth}>
           {children}
         </ConvexProviderWithAuth>
