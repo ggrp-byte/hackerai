@@ -1,8 +1,7 @@
 "use client";
 
 import { ReactNode, useState } from "react";
-import { ConvexReactClient } from "convex/react";
-import { ConvexProviderWithAuth } from "convex/react";
+import { ConvexReactClient, ConvexProviderWithAuth } from "convex/react";
 import { AuthKitProvider } from "@workos-inc/authkit-nextjs/components";
 import type { NoUserInfo, UserInfo } from "@workos-inc/authkit-nextjs";
 import { useAuthFromAuthKit } from "@/lib/auth/use-auth-from-authkit";
@@ -11,6 +10,17 @@ const PRERENDER_CONVEX_URL = "https://placeholder.convex.cloud";
 
 type AuthKitInitialAuth =
   Omit<UserInfo, "accessToken"> | Omit<NoUserInfo, "accessToken">;
+
+const LOCAL_USER_INFO = {
+  user: {
+    id: "local-user",
+    email: "local@localhost",
+    firstName: "Local",
+    lastName: "User",
+  },
+  organizationId: undefined,
+  entitlements: ["ultra-plan"],
+} as AuthKitInitialAuth;
 
 const useLocalAuth = () => ({
   isLoading: false,
@@ -40,11 +50,11 @@ export function ConvexClientProvider({
   const isLocalMode = process.env.NEXT_PUBLIC_HACKERAI_LOCAL === "true";
 
   if (isLocalMode) {
-    // GlobalState still consumes WorkOS AuthKit hooks for UI/session state.
-    // Keep that React context present, but start it signed out so AuthKit does
-    // not try to call its server-side access-token action in local mode.
     return (
-      <AuthKitProvider initialAuth={{ user: null }} onSessionExpired={false}>
+      <AuthKitProvider
+        initialAuth={LOCAL_USER_INFO}
+        onSessionExpired={false}
+      >
         <ConvexProviderWithAuth client={convex} useAuth={useLocalAuth}>
           {children}
         </ConvexProviderWithAuth>
