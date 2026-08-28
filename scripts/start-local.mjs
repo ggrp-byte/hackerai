@@ -144,13 +144,22 @@ const childEnv = {
   DRBINARY_MCP_TIMEOUT_MS: process.env.DRBINARY_MCP_TIMEOUT_MS || "600000",
 };
 
+if (!/^true$/i.test(process.env.HACKERAI_ENABLE_TRIGGER || "false")) {
+  delete childEnv.TRIGGER_PROJECT_ID;
+  delete childEnv.TRIGGER_SECRET_KEY;
+}
+
+delete childEnv.CONVEX_DEPLOYMENT;
+delete childEnv.CONVEX_URL;
+delete childEnv.NEXT_PUBLIC_CONVEX_URL;
+
 console.log("");
 console.log(`HackerAI local model: ${modelName}`);
 console.log(`Ollama endpoint: ${ollamaUrl}`);
 console.log(`Dr.Binary MCP: ${childEnv.DRBINARY_MCP_URL}`);
 console.log(
   `Trigger.dev: ${
-    childEnv.TRIGGER_PROJECT_ID && childEnv.TRIGGER_SECRET_KEY
+    process.env.TRIGGER_PROJECT_ID && process.env.TRIGGER_SECRET_KEY
       ? "available (disabled by default)"
       : "not configured"
   }`,
@@ -160,10 +169,7 @@ console.log("");
 const enableTrigger = /^true$/i.test(
   process.env.HACKERAI_ENABLE_TRIGGER || "false",
 );
-const startScript =
-  enableTrigger && childEnv.TRIGGER_PROJECT_ID && childEnv.TRIGGER_SECRET_KEY
-    ? "dev:all"
-    : "dev:local";
+const startScript = enableTrigger ? "dev:all" : "dev:local";
 
 console.log(`Starting pnpm run ${startScript}...`);
 
