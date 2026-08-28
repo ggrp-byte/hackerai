@@ -44,6 +44,7 @@ import { isE2BSandbox } from "./utils/sandbox-types";
 import { getSandboxWithFallbackGuard } from "./utils/sandbox-fallback";
 import { createE2BResourcePressureObserver } from "@/lib/analytics/sandbox-resource-pressure";
 import { E2B_COST_PER_MS } from "./utils/e2b-cost";
+import { createDrBinaryTool } from "@/lib/ai/mcp/drbinary";
 import { phLogger } from "@/lib/posthog/server";
 import type { TriggerRunRegion } from "@/lib/api/trigger-region";
 import type { CloudSandboxAcquisitionContext } from "./utils/cloud-sandbox";
@@ -258,6 +259,7 @@ export const createTools = (
       run_terminal_cmd: createRunTerminalCmd(context),
       interact_terminal_session: createInteractTerminalSession(context),
       get_terminal_files: createGetTerminalFiles(context),
+      drbinary: createDrBinaryTool(context),
       file: createFile(context),
       todo_write: createTodoWrite(context),
       ...(notesEnabled && {

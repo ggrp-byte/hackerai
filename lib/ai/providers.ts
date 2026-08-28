@@ -1,5 +1,6 @@
 import { customProvider } from "ai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
+import { createOpenAI } from "@ai-sdk/openai";
 import type { ChatMode, SelectedModel } from "@/types/chat";
 import { openrouterAttributionHeaders } from "@/lib/ai/openrouter-attribution";
 
@@ -969,6 +970,15 @@ const openrouter = createOpenRouter({
   headers: openrouterAttributionHeaders,
 });
 
+const localOllama = createOpenAI({
+  name: "ollama",
+  baseURL: process.env.OLLAMA_BASE_URL ?? "http://127.0.0.1:11434/v1",
+  apiKey: process.env.OLLAMA_API_KEY ?? "ollama",
+});
+
+const localOllamaEnabled = process.env.HACKERAI_LOCAL_MODEL === "true";
+const localOllamaModelName = process.env.OLLAMA_MODEL ?? "hacker-local";
+
 type OpenRouterInstance = typeof openrouter;
 
 export const KIMI_K3_SLUG = "moonshotai/kimi-k3";
@@ -1011,19 +1021,19 @@ const buildProviderMap = (
   freeAgentDeepSeekSlug = DEEPSEEK_V4_FLASH_SLUG,
 ) =>
   ({
-    "ask-model": or(GROK_4_6_SLUG),
-    "ask-model-free": or(freeAskDeepSeekSlug),
-    "agent-model": or(GROK_4_6_SLUG),
-    "agent-model-free": or(freeAgentDeepSeekSlug),
-    "model-grok-4.6": or(GROK_4_6_SLUG),
+    "ask-model": localOllamaEnabled ? localOllama(localOllamaModelName) : or(GROK_4_6_SLUG),
+    "ask-model-free": localOllamaEnabled ? localOllama(localOllamaModelName) : or(freeAskDeepSeekSlug),
+    "agent-model": localOllamaEnabled ? localOllama(localOllamaModelName) : or(GROK_4_6_SLUG),
+    "agent-model-free": localOllamaEnabled ? localOllama(localOllamaModelName) : or(freeAgentDeepSeekSlug),
+    "model-grok-4.6": localOllamaEnabled ? localOllama(localOllamaModelName) : or(GROK_4_6_SLUG),
     // Separate internal keys use the same Grok 4.5 provider model while
     // provider reasoning options distinguish Standard from Pro vision.
     "model-grok-4.5": or(GROK_4_5_SLUG),
     "model-grok-4.5-pro": or(GROK_4_5_SLUG),
     "model-grok-4.6-pro": or(GROK_4_6_SLUG),
-    "model-deepseek-v4-flash-0731": or(DEEPSEEK_V4_FLASH_SLUG),
+    "model-deepseek-v4-flash-0731": localOllamaEnabled ? localOllama(localOllamaModelName) : or(DEEPSEEK_V4_FLASH_SLUG),
     "model-deepseek-v4-pro": or(DEEPSEEK_V4_PRO_SLUG),
-    "model-deepseek-v4-pro-0813": or(DEEPSEEK_V4_PRO_0813_SLUG),
+    "model-deepseek-v4-pro-0813": localOllamaEnabled ? localOllama(localOllamaModelName) : or(DEEPSEEK_V4_PRO_0813_SLUG),
     // Keep the persisted Max compatibility key while routing new requests to
     // Kimi K3. Renaming the key would invalidate existing stored selections.
     "model-opus-4.6": or(KIMI_K3_SLUG),
@@ -1033,8 +1043,8 @@ const buildProviderMap = (
     "model-glm-5.3-flash-pro": or(GLM_5_3_FLASH_SLUG),
     "model-deepseek-v4-flash-vision": or(DEEPSEEK_V4_FLASH_VISION_SLUG),
     "model-kimi-k3": or(KIMI_K3_SLUG),
-    "fallback-agent-model": or(GROK_4_6_SLUG),
-    "fallback-ask-model": or(GROK_4_6_SLUG),
+    "fallback-agent-model": localOllamaEnabled ? localOllama(localOllamaModelName) : or(GROK_4_6_SLUG),
+    "fallback-ask-model": localOllamaEnabled ? localOllama(localOllamaModelName) : or(GROK_4_6_SLUG),
     // Titles are a short structured-output task and should never use reasoning.
     "title-generator-model": or(TITLE_GENERATOR_DEEPSEEK_SLUG),
     // Separate text-only, tool-less call used to review one approval-gated
