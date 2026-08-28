@@ -14,21 +14,29 @@ const fullWidthShell = (
   </div>
 );
 
-/**
- * Shared layout for / and /c/[id]. In local mode, render the authenticated
- * shell unconditionally because local Convex auth is synthetic and does not
- * depend on the WorkOS browser session.
- */
-export default function ChatRouteLayout({
+function LocalChatRouteLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="h-dvh min-h-0 flex flex-col bg-background overflow-hidden">
+      <ChatRoutePresentationProvider>
+        <ChatLayout>{children}</ChatLayout>
+      </ChatRoutePresentationProvider>
+    </div>
+  );
+}
+
+function AuthenticatedChatRouteLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
   const { isLoading, isAuthenticated } = useConvexAuth();
   const hasAuthHint = useHasAuthenticatedBefore();
-  const isLocalMode = process.env.NEXT_PUBLIC_HACKERAI_LOCAL === "true";
 
-  if (isLocalMode || isAuthenticated || (isLoading && hasAuthHint)) {
+  if (isAuthenticated || (isLoading && hasAuthHint)) {
     return (
       <div className="h-dvh min-h-0 flex flex-col bg-background overflow-hidden">
         <ChatRoutePresentationProvider>
@@ -47,4 +55,22 @@ export default function ChatRouteLayout({
       {children}
     </div>
   );
+}
+
+/**
+ * Shared layout for / and /c/[id]. Local mode does not use Convex auth,
+ * so it must not call useConvexAuth outside ConvexProviderWithAuth.
+ */
+export default function ChatRouteLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const isLocalMode = process.env.NEXT_PUBLIC_HACKERAI_LOCAL === "true";
+
+  if (isLocalMode) {
+    return <LocalChatRouteLayout>{children}</LocalChatRouteLayout>;
+  }
+
+  return <AuthenticatedChatRouteLayout>{children}</AuthenticatedChatRouteLayout>;
 }
